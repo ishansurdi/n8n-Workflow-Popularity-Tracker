@@ -200,6 +200,46 @@
         function renderStats(data) {
             const statsCards = document.getElementById('statsCards');
             
+            // Check database size limit
+            const dbInfo = data.database_info;
+            if (dbInfo && dbInfo.limit_exceeded) {
+                // Disable refresh button
+                const refreshBtn = document.querySelector('button[onclick="triggerCollection()"]');
+                if (refreshBtn) {
+                    refreshBtn.disabled = true;
+                    refreshBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    refreshBtn.innerHTML = '⚠️ Database Limit Reached';
+                    refreshBtn.title = `Database size (${dbInfo.size_mb} MB) exceeds ${dbInfo.limit_mb} MB limit`;
+                }
+                
+                // Show warning message
+                const existingWarning = document.querySelector('.db-size-warning');
+                if (!existingWarning) {
+                    const warningDiv = document.createElement('div');
+                    warningDiv.className = 'db-size-warning bg-red-50 border border-red-200 rounded-lg p-4 mb-6';
+                    warningDiv.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <div class="text-red-500 mt-0.5">⚠️</div>
+                            <div>
+                                <h3 class="font-semibold text-red-800 mb-1">Database Size Limit Exceeded</h3>
+                                <p class="text-red-700 text-sm mb-2">
+                                    Current database size: <strong>${dbInfo.size_mb} MB</strong> (Limit: ${dbInfo.limit_mb} MB)
+                                </p>
+                                <p class="text-red-600 text-sm">
+                                    Data collection is disabled. Please deploy with your own MongoDB instance to continue adding data.
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const container = document.querySelector('.max-w-7xl');
+                    const headerSection = container.querySelector('header');
+                    if (headerSection) {
+                        headerSection.after(warningDiv);
+                    }
+                }
+            }
+            
             const stats = [
                 {
                     title: 'Total Workflows',
@@ -220,10 +260,10 @@
                     color: 'bg-green-500'
                 },
                 {
-                    title: 'Trending Keywords',
-                    value: data.platforms.find(p => p.platform === 'Google Trends')?.count || 0,
-                    icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>`,
-                    color: 'bg-orange-500'
+                    title: dbInfo ? `DB Size (${dbInfo.size_mb}MB)` : 'Trending Keywords',
+                    value: dbInfo ? `${((dbInfo.size_mb / dbInfo.limit_mb) * 100).toFixed(1)}%` : (data.platforms.find(p => p.platform === 'Google Trends')?.count || 0),
+                    icon: dbInfo ? (dbInfo.limit_exceeded ? '🚨' : '💾') : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>`,
+                    color: dbInfo ? (dbInfo.limit_exceeded ? 'bg-red-500' : 'bg-indigo-500') : 'bg-orange-500'
                 }
             ];
 
@@ -232,10 +272,10 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-sm font-medium text-gray-600">${stat.title}</p>
-                            <p class="text-2xl font-semibold text-gray-900 mt-1">${formatNumber(stat.value)}</p>
+                            <p class="text-2xl font-semibold text-gray-900 mt-1">${typeof stat.icon === 'string' && stat.icon.includes('%') ? stat.value : formatNumber(stat.value)}</p>
                         </div>
                         <div class="w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white">
-                            ${stat.icon}
+                            ${typeof stat.icon === 'string' && !stat.icon.includes('svg') ? '<span class="text-lg">' + stat.icon + '</span>' : stat.icon}
                         </div>
                     </div>
                 </div>
@@ -504,6 +544,19 @@
                     currentOffset = 0;
                     loadStats();
                     loadWorkflows();
+                } else if (data.error === 'Database size limit exceeded') {
+                    // Show database limit exceeded message
+                    const message = `❌ Database Size Limit Exceeded\n\n` +
+                                  `Current size: ${data.size_mb} MB\n` +
+                                  `Limit: ${data.limit_mb} MB\n\n` +
+                                  `${data.message}\n\n` +
+                                  `The refresh button has been disabled to prevent further data collection.`;
+                    alert(message);
+                    
+                    // Refresh stats to show the warning
+                    loadStats();
+                } else {
+                    alert('Error: ' + (data.message || data.error || 'Unknown error'));
                 }
             } catch (error) {
                 alert('Error collecting data: ' + error.message);

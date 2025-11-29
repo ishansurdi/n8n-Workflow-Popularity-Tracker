@@ -110,6 +110,42 @@ def save_workflow(workflow: Dict):
     except Exception as e:
         logger.error(f"Error saving workflow: {str(e)}")
 
+def check_db_size_limit():
+    """Check if database size exceeds 10MB limit"""
+    try:
+        # Get database stats
+        stats = db.command("dbStats")
+        db_size_mb = stats.get('dataSize', 0) / (1024 * 1024)  # Convert to MB
+        
+        logger.info(f"Current database size: {db_size_mb:.2f} MB")
+        
+        # Check if exceeds 10MB limit
+        if db_size_mb > 10:
+            return True, db_size_mb
+        return False, db_size_mb
+        
+    except Exception as e:
+        logger.error(f"Error checking database size: {e}")
+        return False, 0
+
+def check_db_size_limit():
+    """Check if database size exceeds 10MB limit"""
+    try:
+        # Get database stats
+        stats = db.command("dbStats")
+        db_size_mb = stats.get('dataSize', 0) / (1024 * 1024)  # Convert to MB
+        
+        logger.info(f"Current database size: {db_size_mb:.2f} MB")
+        
+        # Check if exceeds 10MB limit
+        if db_size_mb > 10:
+            return True, db_size_mb
+        return False, db_size_mb
+        
+    except Exception as e:
+        logger.error(f"Error checking database size: {e}")
+        return False, 0
+
 def log_collection(platform: str, count: int, status: str, error: str = None):
     """Log collection history in MongoDB"""
     try:
@@ -260,6 +296,9 @@ def get_stats():
         ).sort('engagement_score', DESCENDING).limit(10)
         top_workflows = list(top_workflows_cursor)
         
+        # Check database size
+        size_exceeded, db_size_mb = check_db_size_limit()
+        
         # Recent collection history
         recent_collections_cursor = collection_history.find(
             {},
@@ -273,7 +312,12 @@ def get_stats():
             'platforms': platforms,
             'countries': countries,
             'top_workflows': top_workflows,
-            'recent_collections': recent_collections
+            'recent_collections': recent_collections,
+            'database_info': {
+                'size_mb': round(db_size_mb, 2),
+                'limit_exceeded': size_exceeded,
+                'limit_mb': 10
+            }
         })
     
     except Exception as e:
@@ -284,6 +328,17 @@ def get_stats():
 def trigger_collection():
     """Manually trigger data collection"""
     try:
+        # Check database size limit first
+        size_exceeded, db_size_mb = check_db_size_limit()
+        if size_exceeded:
+            return jsonify({
+                'success': False,
+                'error': 'Database size limit exceeded',
+                'message': f'Database size ({db_size_mb:.2f} MB) exceeds 10 MB limit. Please deploy with your own MongoDB instance.',
+                'size_mb': round(db_size_mb, 2),
+                'limit_mb': 10
+            }), 400
+        
         data = request.get_json()
         platforms = data.get('platforms', ['youtube', 'forum', 'google'])
         countries = data.get('countries', ['US', 'IN'])
