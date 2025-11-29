@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>n8n Workflow Popularity Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .loader {
+            width: 32px;
+            height: 32px;
+            border: 2px solid #e2e8f0;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-semibold text-gray-900">n8n Workflow Popularity Tracker</h1>
+                    <p class="text-gray-600 mt-1">Discover trending automation workflows across multiple platforms</p>
+                </div>
+                <button onclick="triggerCollection()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Cards -->
+        <div id="statsCards" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <!-- Will be populated by JS -->
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                    <input type="text" id="searchInput" placeholder="Search workflows..." 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Platform</label>
+                    <select id="platformFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors">
+                        <option value="all">All Platforms</option>
+                        <option value="YouTube">YouTube</option>
+                        <option value="Forum">Forum</option>
+                        <option value="Google Trends">Google Trends</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                    <select id="countryFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors">
+                        <option value="all">All Countries</option>
+                        <option value="US">United States</option>
+                        <option value="IN">India</option>
+                        <option value="GLOBAL">Global</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                    <select id="sortFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors">
+                        <option value="engagement">Engagement Score</option>
+                        <option value="views">Views/Volume</option>
+                        <option value="likes">Likes/Replies</option>
+                        <option value="recent">Recently Updated</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="flex justify-center items-center py-12">
+            <div class="loader"></div>
+        </div>
+
+        <!-- Workflows Table -->
+        <div id="workflowsContainer" class="bg-white/60 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/20 hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full">
+                    <thead class="bg-gradient-to-r from-slate-50 to-slate-100/80">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Workflow</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Platform</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Country</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Metrics</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Engagement</th>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-slate-700">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workflowsTable" class="divide-y divide-slate-200/60">
+                        <!-- Will be populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-gradient-to-r from-slate-50/80 to-slate-100/60 px-6 py-4 flex justify-between items-center border-t border-slate-200/60">
+                <div class="text-sm text-slate-600 font-medium">
+                    Showing <span id="showingCount" class="font-bold text-slate-700">0</span> of <span id="totalCount" class="font-bold text-slate-700">0</span> workflows
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="exportData()" id="exportBtn" class="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg font-medium">
+                        Export Data
+                    </button>
+                    <button onclick="loadMore()" id="loadMoreBtn" class="px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 shadow-lg font-medium">
+                        Load More
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:5000/api';
+        let currentOffset = 0;
+        const limit = 50;
+        let allWorkflows = [];
+        let filteredWorkflows = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadWorkflows();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('searchInput').addEventListener('input', debounce(applySearchFilter, 300));
+            document.getElementById('platformFilter').addEventListener('change', applyFilters);
+            document.getElementById('countryFilter').addEventListener('change', applyFilters);
+            document.getElementById('sortFilter').addEventListener('change', applyFilters);
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        async function loadStats() {
+            try {
+                // Show loading state for stats
+                const statsCards = document.getElementById('statsCards');
+                statsCards.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <div class="loader mx-auto mb-4"></div>
+                        <p class="text-gray-600">Loading statistics, please wait...</p>
+                    </div>
+                `;
+                
+                const response = await fetch(`${API_BASE}/stats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderStats(data);
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                const statsCards = document.getElementById('statsCards');
+                statsCards.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <p class="text-red-600">Error loading statistics. Please try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderStats(data) {
+            const statsCards = document.getElementById('statsCards');
+            
+            const stats = [
+                {
+                    title: 'Total Workflows',
+                    value: data.total_workflows || 0,
+                    icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>`,
+                    color: 'bg-blue-500'
+                },
+                {
+                    title: 'YouTube Videos',
+                    value: data.platforms.find(p => p.platform === 'YouTube')?.count || 0,
+                    icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`,
+                    color: 'bg-red-500'
+                },
+                {
+                    title: 'Forum Topics',
+                    value: data.platforms.find(p => p.platform === 'Forum')?.count || 0,
+                    icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path></svg>`,
+                    color: 'bg-green-500'
+                },
+                {
+                    title: 'Trending Keywords',
+                    value: data.platforms.find(p => p.platform === 'Google Trends')?.count || 0,
+                    icon: `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>`,
+                    color: 'bg-orange-500'
+                }
+            ];
+
+            statsCards.innerHTML = stats.map(stat => `
+                <div class="bg-white rounded-lg border border-gray-200 p-6 card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">${stat.title}</p>
+                            <p class="text-2xl font-semibold text-gray-900 mt-1">${formatNumber(stat.value)}</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white">
+                            ${stat.icon}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function loadWorkflows(append = false) {
+            try {
+                document.getElementById('loadingState').classList.remove('hidden');
+                
+                // Show loading message in table if not appending
+                if (!append) {
+                    const tbody = document.getElementById('workflowsTable');
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center">
+                                <div class="loader mx-auto mb-4"></div>
+                                <p class="text-gray-600">Loading workflows, please wait...</p>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                const platform = document.getElementById('platformFilter').value;
+                const country = document.getElementById('countryFilter').value;
+                const sort = document.getElementById('sortFilter').value;
+                
+                // Use server-side filtering
+                const url = `${API_BASE}/workflows?platform=${platform}&country=${country}&sort=${sort}&limit=${limit}&offset=${currentOffset}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (append) {
+                        allWorkflows = [...allWorkflows, ...data.workflows];
+                    } else {
+                        allWorkflows = data.workflows;
+                        currentOffset = 0;
+                    }
+                    
+                    // Apply client-side search filtering if needed
+                    applySearchFilter();
+                    
+                    document.getElementById('totalCount').textContent = data.total;
+                    document.getElementById('loadMoreBtn').disabled = allWorkflows.length >= data.total;
+                }
+                
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('workflowsContainer').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading workflows:', error);
+                document.getElementById('loadingState').classList.add('hidden');
+            }
+        }
+
+        function applyFilters() {
+            // Reset and reload from server with new filters
+            currentOffset = 0;
+            loadWorkflows(false);
+        }
+
+        function applySearchFilter() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            
+            filteredWorkflows = allWorkflows.filter(wf => {
+                return !searchTerm || wf.workflow.toLowerCase().includes(searchTerm);
+            });
+            
+            renderWorkflows();
+        }
+
+        function renderWorkflows() {
+            const tbody = document.getElementById('workflowsTable');
+            
+            if (filteredWorkflows.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                            No workflows found. Try adjusting your filters or refresh the data.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = filteredWorkflows.map(wf => {
+                const metrics = renderMetrics(wf);
+                const platformBadge = getPlatformBadge(wf.platform);
+                
+                return `
+                    <tr class="hover:bg-gray-50 transition fade-in">
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-medium text-gray-900">${escapeHtml(wf.workflow)}</div>
+                            <div class="text-xs text-gray-500 mt-1">${wf.last_updated || ''}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${platformBadge}
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm font-medium text-gray-700">${wf.country}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${metrics}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                                    <div class="bg-blue-600 h-2 rounded-full" style="width: ${Math.min(100, wf.engagement_score / 10)}%"></div>
+                                </div>
+                                <span class="text-sm font-medium text-gray-700">${Math.round(wf.engagement_score)}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <a href="${wf.source_url}" target="_blank" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                View Source →
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.getElementById('showingCount').textContent = filteredWorkflows.length;
+        }
+
+        function renderMetrics(workflow) {
+            const metrics = workflow.popularity_metrics;
+            if (!metrics) return '<span class="text-sm text-gray-500">N/A</span>';
+            
+            if (workflow.platform === 'YouTube') {
+                return `
+                    <div class="text-sm space-y-1 text-gray-600">
+                        <div>${formatNumber(metrics.views)} views</div>
+                        <div>${formatNumber(metrics.likes)} likes</div>
+                        <div>${formatNumber(metrics.comments)} comments</div>
+                    </div>
+                `;
+            } else if (workflow.platform === 'Forum') {
+                return `
+                    <div class="text-sm space-y-1 text-gray-600">
+                        <div>${formatNumber(metrics.views)} views</div>
+                        <div>${formatNumber(metrics.replies)} replies</div>
+                        <div>${formatNumber(metrics.contributors)} contributors</div>
+                    </div>
+                `;
+            } else if (workflow.platform === 'Google Trends') {
+                return `
+                    <div class="text-sm space-y-1 text-gray-600">
+                        <div>${formatNumber(metrics.search_volume)} searches/mo</div>
+                        <div class="${metrics.trend_change > 0 ? 'text-green-600' : 'text-red-600'}">
+                            ${metrics.trend_change > 0 ? '+' : ''}${metrics.trend_change}% trend
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return '<span class="text-sm text-gray-500">N/A</span>';
+        }
+
+        function getPlatformBadge(platform) {
+            const badges = {
+                'YouTube': '<span class="px-2 py-1 text-xs font-medium rounded-md bg-red-50 text-red-700 border border-red-200">YouTube</span>',
+                'Forum': '<span class="px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 border border-green-200">Forum</span>',
+                'Google Trends': '<span class="px-2 py-1 text-xs font-medium rounded-md bg-orange-50 text-orange-700 border border-orange-200">Trends</span>'
+            };
+            return badges[platform] || platform;
+        }
+
+        function getCountryName(country) {
+            const countries = {
+                'US': 'US',
+                'IN': 'India',
+                'GLOBAL': 'Global'
+            };
+            return countries[country] || country;
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function loadMore() {
+            currentOffset += 50;
+            loadWorkflows(true);
+        }
+
+        async function exportData() {
+            try {
+                document.getElementById('exportBtn').disabled = true;
+                document.getElementById('exportBtn').textContent = 'Exporting...';
+                
+                // Fetch all workflows without pagination
+                const response = await fetch(`${API_BASE}/workflows?limit=1000`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Create export object with metadata
+                    const exportData = {
+                        export_info: {
+                            generated_at: new Date().toISOString(),
+                            total_workflows: data.total,
+                            platform_breakdown: {},
+                            country_breakdown: {}
+                        },
+                        workflows: data.workflows
+                    };
+                    
+                    // Calculate breakdowns
+                    data.workflows.forEach(wf => {
+                        exportData.export_info.platform_breakdown[wf.platform] = 
+                            (exportData.export_info.platform_breakdown[wf.platform] || 0) + 1;
+                        exportData.export_info.country_breakdown[wf.country] = 
+                            (exportData.export_info.country_breakdown[wf.country] || 0) + 1;
+                    });
+                    
+                    // Create and download file
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                        type: 'application/json'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `n8n_project_dataset_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('Failed to export data. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error exporting data:', error);
+                alert('Error exporting data. Please try again.');
+            } finally {
+                document.getElementById('exportBtn').disabled = false;
+                document.getElementById('exportBtn').textContent = 'Export Data';
+            }
+        }
+
+        async function triggerCollection() {
+            const button = event.target.closest('button');
+            button.disabled = true;
+            button.innerHTML = '<div class="loader"></div> Collecting...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/collect`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        platforms: ['youtube', 'forum', 'google'],
+                        countries: ['US', 'IN']
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Data collection completed! Refreshing...');
+                    currentOffset = 0;
+                    loadStats();
+                    loadWorkflows();
+                }
+            } catch (error) {
+                alert('Error collecting data: ' + error.message);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh Data
+                `;
+            }
+        }
+    </script>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-200 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="text-center">
+                <p class="text-gray-600 mb-2">
+                    Made by <a href="https://github.com/ishansurdi" target="_blank" rel="noopener noreferrer">Ishan Rahul Surdi</a>
+                </p>
+                <p class="text-sm text-gray-500">
+                    n8n Workflow Popularity Tracker • 180+ workflows analyzed
+                </p>
+                <p class="text-xs text-gray-400 mt-2">
+                    Flask • MongoDB • YouTube Data API v3 • Google Trends
+                </p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
