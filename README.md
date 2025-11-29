@@ -65,7 +65,6 @@ A comprehensive system that tracks and analyzes the popularity of n8n workflows 
 
 - Run `python scheduler.py` for daily updates
 - YouTube Data API v3 for real workflow video metrics
-- Google Trends API (pytrends) for search interest and trend analysis
 - Tracks keyword popularity changes over 3-month periods
 
 **Results Achieved:**
